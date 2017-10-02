@@ -14,8 +14,8 @@ char webpage[] =
 "HTTP/1.1 200 OK\r\n"
 "Content-type: text/html; charset=UTF -8\r\n\r\n"
 "<!DOCTYPE html>\r\n"
-"<html><head><title>ShellWaveX</title>\r\n"
-"<style>body {background-color: #FFFF00 } </style></head>\r\n"
+"<html><head><style>\r\n"
+"body {background-color: #FFFF00 } </style></head>\r\n"
 "<body><center><h1>Hello Salah!</h1><br>\r\n"
 "</center></body></html>\r\n";
  
@@ -27,17 +27,17 @@ int main(int argc, char *argv[])
 	int fd_server, fd_client; 
 	char buff[2048];
 	int on = 1;
-	int port = 10178;
-	//int on = 1, port = argv[1];
-	
+	int port = strtol(argv[1], NULL, 10);
+		
 	// create and bind a TCP socket
 	fd_server = socket(AF_INET, SOCK_STREAM, 0); // returns positive if success
 	if(fd_server < 0)
 	{
-		perror("socket");
+		perror("socket error");
 		exit(1);
 	}
 	
+	memset(&server_addr, 0, sizeof(server_addr));
 	setsockopt(fd_server, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
 	
 	server_addr.sin_family = AF_INET;
@@ -70,23 +70,18 @@ int main(int argc, char *argv[])
 
 		printf("Got client connection.......\n");
 		
-		if(!fork())
-		{
-			/* child process */
-			close(fd_server);
-			memset(buff, 0, 2048);
-			read(fd_client, buff, 2047);
+		close(fd_server);
+		memset(buff, 0, 2048);
+		read(fd_client, buff, 2047);
 
-			printf("%s\n", buff);
+		printf("%s\n", buff);
 
-			write(fd_client, webpage, sizeof(webpage) - 1);
+		write(fd_client, webpage, sizeof(webpage) - 1);
 			
-			close(fd_client);
-			printf("closing...\n");
-			exit(0);
+		close(fd_client);
+		printf("closing...\n");
+		exit(0);
 
-		}
-		/* parent process */
 		close(fd_client);
 	} 
 	
