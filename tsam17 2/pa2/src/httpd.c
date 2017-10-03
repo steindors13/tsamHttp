@@ -14,10 +14,9 @@ char webpage[] =
 "HTTP/1.1 200 OK\r\n"
 "Content-type: text/html; charset=UTF -8\r\n\r\n"
 "<!DOCTYPE html>\r\n"
-"<html><head><style>\r\n"
-"body {background-color: #FFFF00 } </style></head>\r\n"
-"<body><center><h1>Hello Salah!</h1><br>\r\n"
-"</center></body></html>\r\n";
+"<html>\r\n"
+"<body><h1>An IP address should be here, plus the port number</h1><br>\r\n"
+"</body></html>\r\n";
  
 
 int main(int argc, char *argv[])
@@ -25,9 +24,11 @@ int main(int argc, char *argv[])
 	struct sockaddr_in server_addr, client_addr;  // internet address
 	socklen_t sin_len = sizeof(client_addr);  // size of address
 	int fd_server, fd_client; 
-	char buff[2048];
+	char buff_cli[2048];
+	char buff_serv[2048];
 	int on = 1;
 	int port = strtol(argv[1], NULL, 10);
+	printf("Starting server, %d arguments\n", argc);
 		
 	// create and bind a TCP socket
 	fd_server = socket(AF_INET, SOCK_STREAM, 0); // returns positive if success
@@ -69,20 +70,38 @@ int main(int argc, char *argv[])
 		}
 
 		printf("Got client connection.......\n");
-		
-		close(fd_server);
-		memset(buff, 0, 2048);
-		read(fd_client, buff, 2047);
+		//FILE *f;
+		//f = fopen("x.log", "a+");
 
-		printf("%s\n", buff);
+		//close(fd_server);
+		memset(buff_cli, 0, 2048);
+		memset(buff_serv, 0, 2048);
+		read(fd_client, buff_cli, 2047);
+		//read(fd_server, buff_serv, 2047);
+		
+		char *pch = strtok(buff_cli, " \r\n");
+		while(&pch != "\r\n")
+		{
+			printf("%s\n", pch);
+			pch = strtok(NULL, " \r\n");
+		}
+		//for(int i = 0; i < 50; i++)
+		//{
+			//printf("%s\n", pch);
+			//pch = strtok(NULL, " \r\n");
+		//}
+		printf("%s\n", buff_cli);
+		//printf("%s\n", buff_serv);
+		//fprintf(f, "Im logging somethig ..\n");
 
 		write(fd_client, webpage, sizeof(webpage) - 1);
+		//write(fd_server, webpage, sizeof(webpage) - 1);
 			
-		close(fd_client);
 		printf("closing...\n");
-		exit(0);
-
+		
 		close(fd_client);
+		close(fd_server);
+		exit(0);
 	} 
 	
 	return 0;
