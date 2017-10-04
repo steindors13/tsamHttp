@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <glib.h>
 
 char webpage[] =
 "HTTP/1.1 200 OK\r\n"
