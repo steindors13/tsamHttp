@@ -11,6 +11,9 @@
 #include <fcntl.h>
 #include <glib.h>
 
+#define GET 1
+#define POST 2
+
 char webpage[] =
 "HTTP/1.1 200 OK\r\n"
 "Content-type: text/html; charset=UTF -8\r\n\r\n"
@@ -25,27 +28,79 @@ void printClientAddr(&struct sockaddr_in address)
 	unsigned char *ip = (unsigned char *)&client_addr;
 	printf("hahah %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
 }
-*/ 
-void handle_http(int fd_client)
+*/
+void handle_status_request(int request, char *url, int fd_client)
 {
+	int fd_server;
+	fd_server = *webpage;
+	if(fd_server < 0)
+	{
+		printf("can't find webpage to send");
+		exit(0);
+	}
+	 
+	if(request == GET)
+	{	
+		int nread;
+		while ( (nread = read(fd_server, webpage, sizeof(webpage) )) > 0)
+		{
+			write(fd_client, webpage, nread);
+		}
+		close(fd_server);
+	}
+}
+ 
+void handle_http_request(int fd_client)
+{
+	//Message buffer to store information in
+	char Message[5000];
+	// Read the request
 	FILE *fp;
-	// Open file
 	fp = fdopen(fd_client, "r");
 	if(!fp) 
 	{
 		printf("Error reading file, while processing http");
 		exit(0);
 	} 
-	
-	//Read Contents from file
-	char c = fgetc(fp);
-	while ( c != EOF)
+	// Determine what kind of request it is
+	char *c = NULL;
+	c = fgets(Message, sizeof(Message), fp);
+	if(!c)
 	{
-		printf("%c", c);
-		c = fgetc(fp);
+		printf("Can't determine request!\n");
+		exit(0);
 	}
+	printf("Processing: %s\n", c);
+	
+	//Get, Post or even Head ?
+	int request = GET;
+	c = strtok(c, " \r\n");
+	printf("%s requested \n", c);
+	
+	if(strcmp(c, "GET") == 0)
+	{
+		request = GET;
+	}
+	
+	if(strcmp(c, "POST") == 0)
+	{
+		request = POST;
+	}
+	
+	//requested url
+	char *url = NULL;
+	url = strtok(NULL, " \r\n");
+	if(!url)
+	{
+		printf("NO URL\n");
+	}
+	if(url[0] == '/')
+	{
+		url = &url[1];
+	}	
+	printf("url is: %s\n", url);
 
-	fclose(fp);
+	handle_status_request(request, &url, fd_client);
 
 }
 
@@ -105,7 +160,7 @@ int main(int argc, char *argv[])
 		printf("Got client connection.......\n");
 		
 		// Determine what h
-		handle_http(fd_client); 	
+		handle_http_request(fd_client); 	
 		printf("closing...\n");
 		
 		close(fd_client);
