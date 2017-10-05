@@ -18,14 +18,36 @@ char webpage[] =
 "<html>\r\n"
 "<body><h1>An IP address should be here, plus the port number</h1><br>\r\n"
 "</body></html>\r\n";
-
+/*
 void printClientAddr(&struct sockaddr_in address)
 {
 	
 	unsigned char *ip = (unsigned char *)&client_addr;
 	printf("hahah %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
 }
- 
+*/ 
+void handle_http(int fd_client)
+{
+	FILE *fp;
+	// Open file
+	fp = fdopen(fd_client, "r");
+	if(!fp) 
+	{
+		printf("Error reading file, while processing http");
+		exit(0);
+	} 
+	
+	//Read Contents from file
+	char c = fgetc(fp);
+	while ( c != EOF)
+	{
+		printf("%c", c);
+		c = fgetc(fp);
+	}
+
+	fclose(fp);
+
+}
 
 int main(int argc, char *argv[])
 {
@@ -81,24 +103,9 @@ int main(int argc, char *argv[])
 		}
 
 		printf("Got client connection.......\n");
-		int c;
-		FILE *fp;
-		FILE *log;
-		log = fopen("log.log", "r");
-		fp = fdopen(fd_client, "r");
-		if(!fp) 
-		{
-			printf("Error reading file, while processing http");
-			exit(1);
-		} 
-		else
-		{
-			while( (c = getc(fp)) != EOF)
-				putchar(c);
-			
-			fclose(fp);
-		}
 		
+		// Determine what h
+		handle_http(fd_client); 	
 		printf("closing...\n");
 		
 		close(fd_client);
