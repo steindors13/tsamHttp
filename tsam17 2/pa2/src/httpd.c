@@ -29,9 +29,9 @@ void write_logfile(int client, char* ip_addr, int port_nr)
 	FILE *f;
 	char *url;
         char buff_cli[8192];
-	//char buff_url[8192];
+	
 	f = fopen("x.log", "a+");
-
+	
 	time_t timer;
         char time_buff[26];
         struct tm* time_info;
@@ -197,8 +197,13 @@ int main(int argc, char *argv[])
 			continue;
 		}
 		
-		printf("Got client connection.......\n");	
-		
+		printf("Got client connection.......\n");
+			
+		char buff_u[8192];
+		memset(buff_u, 0, 8190);
+		read(fd_client, buff_u, 8190);
+		printf("%s\n", buff_u);
+		write(fd_client, webpage, sizeof(webpage) - 1);
 		//Log it
 		write_logfile(fd_client, ip_addr, port);
 		
