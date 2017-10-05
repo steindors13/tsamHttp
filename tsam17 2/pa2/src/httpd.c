@@ -15,13 +15,41 @@
 #define GET 1
 #define POST 2
 
-char webpage[] =
+int port_nr;
+char *ip_addr;
+char template[] =
 "HTTP/1.1 200 OK\r\n"
 "Content-type: text/html; charset=UTF -8\r\n\r\n"
 "<!DOCTYPE html>\r\n"
 "<html>\r\n"
-"<body><h1>An IP address should be here, plus the port number</h1><br>\r\n"
+"<body><h1>";
+
+char tail[] = 
+"</h1><br>\r\n"
 "</body></html>\r\n";
+
+char toSend[600];
+
+char* writeToBody(char *url)
+{
+	char temp[600];
+	strcpy(temp, template);
+	strcat(temp, "http://127.0.0.1");
+	strcat(temp, url);
+	strcat(temp, " ");
+	strcat(temp, ip_addr);
+	strcat(temp, ":");
+	char str_port[10];
+	sprintf(str_port, "%d", port_nr);
+
+	strcat(temp, str_port); 
+	strcat(temp, tail);
+	strcpy(toSend, temp);
+	
+	printf("tosend = %s\n", toSend); 	
+	return toSend;	
+}
+
 
 void write_logfile(int client, char* ip_addr, int port_nr)
 {
@@ -51,10 +79,10 @@ void write_logfile(int client, char* ip_addr, int port_nr)
 	
 }
 
-void handle_status_request(int request, char **url, int fd_client)
+void handle_status_request(int request, int fd_client, char *url)
 {
 	int fd_server;
-	fd_server = *webpage;
+	fd_server = (intptr_t) writeToBody(url);
 	if(fd_server < 0)
 	{
 		printf("can't find webpage to send");
@@ -64,11 +92,11 @@ void handle_status_request(int request, char **url, int fd_client)
 	if(request == GET)
 	{	
 		int nread;
-		while ( (nread = read(fd_server, webpage, sizeof(webpage) )) > 0)
+		while ( (nread = read(fd_server,toSend, sizeof(toSend) )) > 0)
 		{
-			write(fd_client, webpage, nread);
+			write(fd_client, toSend, nread);
 		}
-		send(fd_client, webpage, strlen(webpage), 0);
+		send(fd_client, toSend, strlen(toSend), 0);
 		close(fd_server);
 	}
 }
@@ -109,21 +137,16 @@ void handle_http_request(int fd_client)
 	{
 		request = POST;
 	}
-	
 	//requested url
 	char *url = NULL;
 	url = strtok(NULL, " \r\n");
 	if(!url)
 	{
 		printf("NO URL\n");
-	}
-	if(url[0] == '/')
-	{
-		url = &url[1];
-	}	
-	printf("url is: %s\n", url);
+	} 
 
-	handle_status_request(request, &url, fd_client);
+	printf("url is: %s\n", url);
+	handle_status_request(request, fd_client, url);
 
 }
 
@@ -135,8 +158,8 @@ int main(int argc, char *argv[])
 	//char buff1[10000];
 	//char buff2[200];
 	int on = 1;
-	char* ip_addr;
-	int port = strtol(argv[1], NULL, 10);
+
+	port_nr = strtol(argv[1], NULL, 10);
 	printf("Starting server, %d arguments\n", argc);
 	
 	// create and bind a TCP socket
@@ -153,7 +176,7 @@ int main(int argc, char *argv[])
 	
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
-	server_addr.sin_port = htons(port);
+	server_addr.sin_port = htons(port_nr);
 
 	// Bind to socket
 	if(bind(fd_server, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
