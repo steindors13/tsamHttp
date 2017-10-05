@@ -29,6 +29,7 @@ char tail[] =
 "</body></html>\r\n";
 
 char toSend[600];
+char *url;
 
 char* writeToBody(char *url)
 {
@@ -51,7 +52,7 @@ char* writeToBody(char *url)
 }
 
 
-void write_logfile(int client, char* ip_addr, int port_nr)
+void write_logfile(int client)
 {
 	FILE *fp;
 	FILE *f;
@@ -152,6 +153,13 @@ void handle_http_request(int fd_client)
 	{
 		request = POST;
 	}
+	
+	handle_status_request(request, fd_client, url);
+
+}
+
+void setUrl()
+{	
 	//requested url
 	char *url = NULL;
 	url = strtok(NULL, " \r\n");
@@ -161,8 +169,7 @@ void handle_http_request(int fd_client)
 	} 
 
 	printf("url is: %s\n", url);
-	handle_status_request(request, fd_client, url);
-
+	
 }
 
 int main(int argc, char *argv[])
@@ -213,7 +220,7 @@ int main(int argc, char *argv[])
 	{
 		printf("waiting for client\n");
 		fd_client = accept(fd_server, (struct sockaddr *) &client_addr, &sin_len);
-		ip_addr = inet_ntoa(client_addr.sin_addr);
+	 	ip_addr = inet_ntoa(client_addr.sin_addr);	
 		if(fd_client < 0)
 		{
 			perror("Connection failed.......");
@@ -221,9 +228,9 @@ int main(int argc, char *argv[])
 		}
 		
 		printf("Got client connection.......\n");	
-		
+		setUrl();	
 		//Log it
-		write_logfile(fd_client, ip_addr, port);
+		write_logfile(fd_client);
 		
 		// Determine what to do with the request
 		handle_http_request(fd_client); 	
