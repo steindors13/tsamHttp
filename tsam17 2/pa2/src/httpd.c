@@ -14,7 +14,9 @@
 
 #define GET 1
 #define POST 2
+#define HEAD 3
 
+int request;
 int port_nr;
 char *ip_addr;
 char template[] =
@@ -31,8 +33,9 @@ char tail[] =
 char toSend[600];
 char *url;
 
-char* writeToBody(char *url)
+char* writeToBody()
 {
+	printf("writing to body\n");
 	char temp[600];
 	strcpy(temp, template);
 	strcat(temp, "http://127.0.0.1");
@@ -52,13 +55,9 @@ char* writeToBody(char *url)
 }
 
 
-void write_logfile(int client)
+void write_logfile()
 {
-	FILE *fp;
 	FILE *f;
-	char *url;
-        char buff_cli[8192];
-	//char buff_url[8192];
 	f = fopen("x.log", "a+");
 
 	time_t timer;
@@ -74,31 +73,15 @@ void write_logfile(int client)
 
 	fprintf(f, "%s : ", ip_addr);
 	fprintf(f, "%d : ", port_nr);
-
-        fp = fdopen(client, "r");
-        char* data = fgets(buff_cli, sizeof(buff_cli), fp);
-	data = strtok(data, " \r\n");
-	fprintf(f, "%s ", data);
+	fprintf(f, "%d : ", request);
 	
-	url = strtok(NULL, " \r\n");
-	if(url == NULL)
-    	{
-        	fprintf(f, " no url%s\n", url);
-        	
-    	}
-    	if(url[0] == '/')
-	{
-        	url = &url[0];
-	}
-	fprintf(f," url = %s\n", url); 
 	fclose(f);
-	
 }
 
-void handle_status_request(int request, int fd_client, char *url)
+void handle_status_request(int fd_client)
 {
 	int fd_server;
-	fd_server = (intptr_t) writeToBody(url);
+	fd_server = (intptr_t) writeToBody();
 	if(fd_server < 0)
 	{
 		printf("can't find webpage to send");
@@ -130,6 +113,7 @@ void handle_http_request(int fd_client)
 		exit(0);
 	} 
 	// Determine what kind of request it is
+	printf("determining\n");
 	char *c = NULL;
 	c = fgets(Message, sizeof(Message), fp);
 	if(!c)
@@ -137,10 +121,8 @@ void handle_http_request(int fd_client)
 		printf("Can't determine request!\n");
 		exit(0);
 	}
-	printf("Processing: %s\n", c);
 	
 	//Get, Post or even Head ?
-	int request = GET;
 	c = strtok(c, " \r\n");
 	printf("%s requested \n", c);
 	
@@ -153,15 +135,9 @@ void handle_http_request(int fd_client)
 	{
 		request = POST;
 	}
-	
-	handle_status_request(request, fd_client, url);
-
-}
-
-void setUrl()
-{	
+		
 	//requested url
-	char *url = NULL;
+	url = NULL;
 	url = strtok(NULL, " \r\n");
 	if(!url)
 	{
@@ -170,7 +146,12 @@ void setUrl()
 
 	printf("url is: %s\n", url);
 	
+	handle_status_request(fd_client);
+	close(fd_client);
 }
+
+
+
 
 int main(int argc, char *argv[])
 {
@@ -228,15 +209,12 @@ int main(int argc, char *argv[])
 		}
 		
 		printf("Got client connection.......\n");	
-		setUrl();	
-		//Log it
-		write_logfile(fd_client);
-		
+	
 		// Determine what to do with the request
 		handle_http_request(fd_client); 	
 		
-		
-		
+		//Log it
+		write_logfile();	
 	
 	} 
 	
