@@ -9,7 +9,8 @@ OBJFLAGS = -c
 
 .DEFAULT: all
 .PHONY: all
-all: $(CC) $(CFLAGS) httpd.c -o httpd 
+all: 
+	$(CC) $(CFLAGS) httpd.c -o httpd 
 
 clean:
 	rm -f *.o
