@@ -27,7 +27,6 @@ void write_logfile(int client, char* ip_addr, int port_nr)
 {
 	FILE *fp;
 	FILE *f;
-        printf("Got client connection.......\n");
         char buff_cli[8192];
 	f = fopen("x.log", "a+");
 	fprintf(f, "client ip: %s ", ip_addr);
@@ -69,6 +68,7 @@ void handle_status_request(int request, char **url, int fd_client)
 		{
 			write(fd_client, webpage, nread);
 		}
+		send(fd_client, webpage, strlen(webpage), 0);
 		close(fd_server);
 	}
 }
@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
 		printf("Got client connection.......\n");	
 		
 		//Log it
-		write_logfile(fd_client, ip_addr, port);
+		//write_logfile(fd_client, ip_addr, port);
 		
 		// Determine what to do with the request
 		handle_http_request(fd_client); 	
