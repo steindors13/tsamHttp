@@ -18,6 +18,13 @@ char webpage[] =
 "<html>\r\n"
 "<body><h1>An IP address should be here, plus the port number</h1><br>\r\n"
 "</body></html>\r\n";
+
+void printClientAddr(&struct sockaddr_in address)
+{
+	
+	unsigned char *ip = (unsigned char *)&client_addr;
+	printf("hahah %d.%d.%d.%d\n", ip[0], ip[1], ip[2], ip[3]);
+}
  
 
 int main(int argc, char *argv[])
@@ -25,14 +32,15 @@ int main(int argc, char *argv[])
 	struct sockaddr_in server_addr, client_addr;  // internet address
 	socklen_t sin_len = sizeof(client_addr);  // size of address
 	int fd_server, fd_client; 
-	char buff_cli[2048];
-	char buff_serv[2048];
+	//char buff_cli[8192];
+	//char buff_serv[8192];
 	int on = 1;
 	int port = strtol(argv[1], NULL, 10);
 	printf("Starting server, %d arguments\n", argc);
-		
+	
 	// create and bind a TCP socket
 	fd_server = socket(AF_INET, SOCK_STREAM, 0); // returns positive if success
+	
 	if(fd_server < 0)
 	{
 		perror("socket error");
@@ -45,15 +53,17 @@ int main(int argc, char *argv[])
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
 	server_addr.sin_port = htons(port);
-	
-	if(bind(fd_server, (struct sockaddr *) &server_addr, sizeof(server_addr)) == -1)
+
+	// Bind to socket
+	if(bind(fd_server, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
 	{
 		perror("bind");
 		close(fd_server);
 		exit(1);
 	}
-
-	if(listen(fd_server, 10) == -1)
+	
+	// Listen for a connection
+	if(listen(fd_server, 10) < 0)
 	{
 		perror("listen");
 		close(fd_server);
@@ -64,40 +74,31 @@ int main(int argc, char *argv[])
 	{
 		fd_client = accept(fd_server, (struct sockaddr *) &client_addr, &sin_len);
 
-		if(fd_client == -1)
+		if(fd_client < 0)
 		{
 			perror("Connection failed.......");
 			continue;
 		}
 
 		printf("Got client connection.......\n");
-		//FILE *f;
-		//f = fopen("x.log", "a+");
-
-		//close(fd_server);
-		memset(buff_cli, 0, 2048);
-		memset(buff_serv, 0, 2048);
-		read(fd_client, buff_cli, 2047);
-		//read(fd_server, buff_serv, 2047);
-		
-		char *pch = strtok(buff_cli, " \r\n");
-		while(&pch != "\r\n")
+		int c;
+		FILE *fp;
+		FILE *log;
+		log = fopen("log.log", "r");
+		fp = fdopen(fd_client, "r");
+		if(!fp) 
 		{
-			printf("%s\n", pch);
-			pch = strtok(NULL, " \r\n");
-		}
-		//for(int i = 0; i < 50; i++)
-		//{
-			//printf("%s\n", pch);
-			//pch = strtok(NULL, " \r\n");
-		//}
-		printf("%s\n", buff_cli);
-		//printf("%s\n", buff_serv);
-		//fprintf(f, "Im logging somethig ..\n");
-
-		write(fd_client, webpage, sizeof(webpage) - 1);
-		//write(fd_server, webpage, sizeof(webpage) - 1);
+			printf("Error reading file, while processing http");
+			exit(1);
+		} 
+		else
+		{
+			while( (c = getc(fp)) != EOF)
+				putchar(c);
 			
+			fclose(fp);
+		}
+		
 		printf("closing...\n");
 		
 		close(fd_client);
