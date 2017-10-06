@@ -119,6 +119,31 @@ void handle_status_request(int fd_client, FILE* f)
 
 	}
 }
+void set_keepalive(FILE *f, int fd_server)
+{
+	int on = 1;
+        socklen_t optlen = sizeof(on);
+	char post_buffer[5000];
+        fseek(f, 0, SEEK_END);
+        long length = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        fread(post_buffer, 1, length, f);
+        fclose(f);
+
+        char *c;
+        c = strstr(post_buffer, "HTTP");
+        c = strtok(c, "\r\n");
+        if(strcmp(c, "HTTP/1.1") == 0)
+        {
+                if(setsockopt(fd_server, SOL_SOCKET, SO_KEEPALIVE, &on, optlen) < 0)
+                {
+                	perror("TCP keep alive error");
+                        close(fd_server);
+                        exit(1);
+                }
+                printf("SO_KEEPALIVE is %s\n", (on ? "ON" : "OFF"));
+        }
+}
  
 void handle_http_request(int fd_client)
 {
@@ -177,8 +202,9 @@ int main(int argc, char *argv[])
 {
 	struct sockaddr_in server_addr, client_addr;  // internet address
 	socklen_t sin_len = sizeof(client_addr);  // size of address
-	int fd_server, fd_client; 
-	int on = 1;
+	int fd_server, fd_client;
+	//int on = 1;
+	//socklen_t optlen = sizeof(on);
 
 	port_nr = strtol(argv[1], NULL, 10);
 	printf("Starting server, %d arguments\n", argc);
@@ -193,12 +219,11 @@ int main(int argc, char *argv[])
 	}
 	
 	memset(&server_addr, 0, sizeof(server_addr));
-	setsockopt(fd_server, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
 	
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
 	server_addr.sin_port = htons(port_nr);
-
+	
 	// Bind to socket
 	if(bind(fd_server, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
 	{
@@ -225,17 +250,30 @@ int main(int argc, char *argv[])
 			perror("Connection failed.......");
 			continue;
 		}
-		char buff_post[10000];
-		printf("Got client connection.......\n");
-		read(fd_client, buff_post, 9999);
-		for(int i = 0; i < 1; i++)
-		{
-			printf("%s\n", buff_post);
-		}		
-		//Log it
-		///write_logfile(fd_client, ip_addr, port_nr);
+		FILE *f;
+        	f = fdopen(fd_client, "w+");
+		set_keepalive(f, fd_server);
+                /*char post_buffer[5000];
+                fseek(f, 0, SEEK_END);
+                long length = ftell(f);
+                fseek(f, 0, SEEK_SET);
+                fread(post_buffer, 1, length, f);
+                fclose(f);
 		
-		printf("Got client connection.......\n");	
+		char *c;
+		printf("Got client connection.......\n");
+		c = strstr(post_buffer, "HTTP");
+		c = strtok(c, "\r\n");
+		if(strcmp(c, "HTTP/1.1") == 0)
+		{
+			if(setsockopt(fd_server, SOL_SOCKET, SO_KEEPALIVE, &on, optlen) < 0)
+        		{
+                		perror("TCP keep alive error");
+                		close(fd_server);
+                		exit(1);
+        		}
+        		printf("SO_KEEPALIVE is %s\n", (on ? "ON" : "OFF"));
+		}*/	
 	
 		// Determine what to do with the request
 		handle_http_request(fd_client); 	
