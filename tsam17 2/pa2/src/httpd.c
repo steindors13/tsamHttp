@@ -219,15 +219,17 @@ void handle_http_request(int fd_client)
 	{
 		request = GET;
 	}
-	
-	if(strcmp(c, "POST") == 0)
+	else if(strcmp(c, "POST") == 0)
 	{
 		request = POST;
 	}
-	
-	if(strcmp(c, "HEAD") == 0)
+	else if(strcmp(c, "HEAD") == 0)
 	{
 		request = HEAD;
+	}
+	else
+	{
+		request = UNKNOWN;
 	}
 		
 	//requested url
