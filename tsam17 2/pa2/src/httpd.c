@@ -188,19 +188,11 @@ void handle_status_request(int fd_client, FILE *fp)
  }
 
  
-void handle_http_request(int fd_client)
+void handle_http_request(int fd_client, FILE *fp)
 {
 	//Message buffer to store information in
 	char Message[5000];
-	// Read the request
-	FILE *fp;
-	fp = fdopen(fd_client, "r");
-	printf("after open %d\n", fd_client);
-	if(!fp) 
-	{
-		printf("Error reading file, while processing http");
-		exit(0);
-	} 
+	 
 	// Determine what kind of request it is
 	printf("determining\n");
 	char *c = NULL;
@@ -304,9 +296,17 @@ int main(int argc, char *argv[])
 			continue;
 		}
 		printf("Got client connection.......\n");	
-	
+		// Read the request
+		FILE *fp;
+		fp = fdopen(fd_client, "r");
+		printf("after open %d\n", fd_client);
+		if(!fp) 
+		{
+			printf("Error reading file, while processing http");
+			exit(0);
+		}
 		// Determine what to do with the request
-		handle_http_request(fd_client); 	
+		handle_http_request(fd_client, fp); 	
 		
 		//Log it
 		write_logfile();	
