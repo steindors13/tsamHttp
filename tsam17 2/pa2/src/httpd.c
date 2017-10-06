@@ -58,8 +58,6 @@ char* writeToBody()
 void write_logfile()
 {
 	FILE *f;
-	//char *url;
-        //char buff_cli[8192];
 	
 	f = fopen("x.log", "a+");
 	
@@ -81,9 +79,10 @@ void write_logfile()
 	fclose(f);
 }
 
-void handle_status_request(int fd_client)
+void handle_status_request(int fd_client, FILE* f)
 {
 	int fd_server;
+	char buff_post[10000];
 	fd_server = (intptr_t) writeToBody();
 	if(fd_server < 0)
 	{
@@ -99,7 +98,7 @@ void handle_status_request(int fd_client)
 			write(fd_client, toSend, nread);
 		}
 		send(fd_client, toSend, strlen(toSend), 0);
-		close(fd_server);
+		//close(fd_server);
 	}
 	else if(request == HEAD)
 	{
@@ -112,7 +111,11 @@ void handle_status_request(int fd_client)
 	}
 	else if(request == POST)
 	{
-		
+		char *c  = NULL;
+		//read(fd_client, buff_post, sizeof(buff_post));
+		//write(fd_client, buff_post, sizeof(buff_post) - 1);
+		c = fgets(buff_post, sizeof(buff_post), f);
+		printf("%s", c);
 
 	}
 }
@@ -163,8 +166,8 @@ void handle_http_request(int fd_client)
 
 	printf("url is: %s\n", url);
 	
-	handle_status_request(fd_client);
-	close(fd_client);
+	handle_status_request(fd_client, fp);
+	//close(fd_client);
 }
 
 
@@ -222,9 +225,13 @@ int main(int argc, char *argv[])
 			perror("Connection failed.......");
 			continue;
 		}
-
+		char buff_post[10000];
 		printf("Got client connection.......\n");
-			
+		read(fd_client, buff_post, 9999);
+		for(int i = 0; i < 1; i++)
+		{
+			printf("%s\n", buff_post);
+		}		
 		//Log it
 		///write_logfile(fd_client, ip_addr, port_nr);
 		
