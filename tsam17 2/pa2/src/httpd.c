@@ -15,42 +15,70 @@
 #define GET 1
 #define POST 2
 #define HEAD 3
+#define UNKNOWN 4
 
 int request;
 int port_nr;
-char *ip_addr;
-char template[] =
+char *ip_addr; 
+char ok_header_template[] =
 "HTTP/1.1 200 OK\r\n"
-"Content-type: text/html; charset=UTF -8\r\n\r\n"
+"Content-type: text/html; charset=UTF -8\r\n\r\n";
+char accepted_header_template[] =
+"HTTP/1.1 202 Accepted\r\n"
+"Content-type: text/html; charset=UTF -8\r\n\r\n";
+char bad_header_template[] =
+"HTTP/1.1 400 Bad Request\r\n"
+"Content-type: text/html; charset=UTF -8\r\n\r\n";
+char html[] =
 "<!DOCTYPE html>\r\n"
 "<html>\r\n"
 "<body><h1>";
-
-char tail[] = 
+char html_tail[] = 
 "</h1><br>\r\n"
 "</body></html>\r\n";
 
 char toSend[600];
 char *url;
 
-char* writeToBody()
-{
-	printf("writing to body\n");
-	char temp[600];
-	strcpy(temp, template);
-	strcat(temp, "http://127.0.0.1");
-	strcat(temp, url);
-	strcat(temp, " ");
-	strcat(temp, ip_addr);
-	strcat(temp, ":");
-	char str_port[10];
-	sprintf(str_port, "%d", port_nr);
+GArray *posts;
 
-	strcat(temp, str_port); 
-	strcat(temp, tail);
-	strcpy(toSend, temp);
+char* writeRespond()
+{
+	memset(toSend, '0', strlen(toSend));
+	printf("writing to body\n");
 	
-	printf("tosend = %s\n", toSend); 	
+	if(request == UNKNOWN)
+	{
+		strcpy(toSend, bad_header_template);
+	}
+	else if(request == HEAD)
+	{
+		strcpy(toSend, ok_header_template);
+	}
+	else if(request == POST)
+	{
+		strcpy(toSend, accepted_header_template);
+	}	
+	else
+	{
+		char temp[600];
+		strcpy(temp, ok_header_template);
+		strcat(temp, html);
+		strcat(temp, "http://127.0.0.1");
+		strcat(temp, url);
+		strcat(temp, " ");
+		strcat(temp, ip_addr);
+		strcat(temp, ":");
+		char str_port[10];
+		sprintf(str_port, "%d", port_nr);
+
+		strcat(temp, str_port); 
+		strcat(temp, html_tail);
+		strcpy(toSend, temp);
+	
+		//printf("tosend = %s\n", toSend); 	
+	}
+	
 	return toSend;	
 }
 
@@ -79,43 +107,85 @@ void write_logfile()
 	fclose(f);
 }
 
-void handle_status_request(int fd_client, FILE* f)
+void handle_status_request(int fd_client, FILE *fp)
 {
+	if(request == POST)
+	{
+		printf("POST REQUEST\n");
+		char post_buffer[5000];
+		
+		
+		fseek(fp, 0, SEEK_END);
+		long length = ftell(fp);
+		fseek(fp, 0, SEEK_SET);
+		
+		fread(post_buffer, 1, length, fp);	
+		
+		fclose(fp);
+		
+		//Isolate the Body	
+		char *token;
+		token = strstr(post_buffer, "\r\n\r\n");
+		strcat(token, ip_addr);
+		strcat(token, ":");
+		char str_port[10];
+		sprintf(str_port, "%d", port_nr);
+		strcat(token, str_port);
+		printf("Inserting body for Post:\n %s\n", token);
+		GString *s = g_string_new( token);
+		g_array_append_val( posts, s);
+		//testing g-array
+		//s = g_array_index( posts, GString *, 0);
+		//printf ("test string %s\n", s->str);
+		
+		//Free Pointers
+		token = NULL;
+		//g_free(s);
+	}
+
 	int fd_server;
-	char buff_post[10000];
-	fd_server = (intptr_t) writeToBody();
+	fd_server = (intptr_t) writeRespond();
 	if(fd_server < 0)
 	{
 		printf("can't find webpage to send");
 		exit(0);
 	}
-	 
+		
+	int nread;
+	while ( (nread = read(fd_server,toSend, sizeof(toSend) )) > 0)
+	{
+		write(fd_client, toSend, nread);
+	}
+	send(fd_client, toSend, strlen(toSend), 0);
+	/*
+
+	if(request == UNKNOWN)
+	{
+			 
 	if(request == GET)
 	{	
+			//close(fd_server);
+	}
+	else if(request == HEAD)
+	{
+		int fd_server;
+		fd_server = (intptr_t) writeRespond();
+		if(fd_server < 0)
+		{
+			printf("can't find webpage to send");
+			exit(0);
+		}
+		
 		int nread;
-		while ( (nread = read(fd_server,toSend, sizeof(toSend) )) > 0)
+		while( (nread = read(fd_server, toSend, sizeof(toSend)) > 0)
 		{
 			write(fd_client, toSend, nread);
 		}
 		send(fd_client, toSend, strlen(toSend), 0);
-		//close(fd_server);
+		
 	}
-	else if(request == HEAD)
-	{
-		if(read(fd_client, toSend, sizeof(toSend)))
-		{
-			send(fd_client, toSend, strlen(toSend), 0);
-		}
-		else
-			perror("Connection failed...");
-	}
-	else if(request == POST)
-	{
-		char *c  = NULL;
-		//read(fd_client, buff_post, sizeof(buff_post));
-		//write(fd_client, buff_post, sizeof(buff_post) - 1);
-		c = fgets(buff_post, sizeof(buff_post), f);
-		printf("%s", c);
+	else*/
+ }
 
 	}
 }
@@ -144,19 +214,13 @@ void set_keepalive(FILE *f, int fd_server)
                 printf("SO_KEEPALIVE is %s\n", (on ? "ON" : "OFF"));
         }
 }
+
  
-void handle_http_request(int fd_client)
+void handle_http_request(int fd_client, FILE *fp)
 {
 	//Message buffer to store information in
 	char Message[5000];
-	// Read the request
-	FILE *fp;
-	fp = fdopen(fd_client, "r");
-	if(!fp) 
-	{
-		printf("Error reading file, while processing http");
-		exit(0);
-	} 
+	 
 	// Determine what kind of request it is
 	printf("determining\n");
 	char *c = NULL;
@@ -175,10 +239,17 @@ void handle_http_request(int fd_client)
 	{
 		request = GET;
 	}
-	
-	if(strcmp(c, "POST") == 0)
+	else if(strcmp(c, "POST") == 0)
 	{
 		request = POST;
+	}
+	else if(strcmp(c, "HEAD") == 0)
+	{
+		request = HEAD;
+	}
+	else
+	{
+		request = UNKNOWN;
 	}
 		
 	//requested url
@@ -239,6 +310,8 @@ int main(int argc, char *argv[])
 		close(fd_server);
 		exit(1);
 	}
+	
+	posts = g_array_sized_new( FALSE, FALSE, sizeof(GString *), 100 );
 
 	while(1)
 	{
@@ -250,33 +323,24 @@ int main(int argc, char *argv[])
 			perror("Connection failed.......");
 			continue;
 		}
+
 		FILE *f;
         	f = fdopen(fd_client, "w+");
 		set_keepalive(f, fd_server);
-                /*char post_buffer[5000];
-                fseek(f, 0, SEEK_END);
-                long length = ftell(f);
-                fseek(f, 0, SEEK_SET);
-                fread(post_buffer, 1, length, f);
-                fclose(f);
-		
-		char *c;
-		printf("Got client connection.......\n");
-		c = strstr(post_buffer, "HTTP");
-		c = strtok(c, "\r\n");
-		if(strcmp(c, "HTTP/1.1") == 0)
+                
+		printf("Got client connection.......\n");	
+		// Read the request
+		FILE *fp;
+		fp = fdopen(fd_client, "r");
+		printf("after open %d\n", fd_client);
+		if(!fp) 
 		{
-			if(setsockopt(fd_server, SOL_SOCKET, SO_KEEPALIVE, &on, optlen) < 0)
-        		{
-                		perror("TCP keep alive error");
-                		close(fd_server);
-                		exit(1);
-        		}
-        		printf("SO_KEEPALIVE is %s\n", (on ? "ON" : "OFF"));
-		}*/	
-	
+			printf("Error reading file, while processing http");
+			exit(0);
+		}
+
 		// Determine what to do with the request
-		handle_http_request(fd_client); 	
+		handle_http_request(fd_client, fp); 	
 		
 		//Log it
 		write_logfile();	
