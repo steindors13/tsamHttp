@@ -157,7 +157,7 @@ void handle_status_request(int fd_client, FILE *fp)
 		write(fd_client, toSend, nread);
 	}
 	send(fd_client, toSend, strlen(toSend), 0);
-
+	close(fd_client);
 }
 void set_keepalive(FILE *f, int fd_server)
 {
@@ -229,6 +229,10 @@ void handle_http_request(int fd_client, FILE *fp)
 	{
 		printf("NO URL\n");
 	} 
+	if(strcmp(url, "/favicon.ico") == 0)
+	{
+		request = UNKNOWN;
+	}
 
 	printf("url is: %s\n", url);
 	
@@ -260,7 +264,7 @@ int main(int argc, char *argv[])
 	}
 	
 	memset(&server_addr, 0, sizeof(server_addr));
-	setsockopt(fd_server, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
+	setsockopt(fd_server, SOL_SOCKET, SO_REUSEADDR, &on, optlen);
 	
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
