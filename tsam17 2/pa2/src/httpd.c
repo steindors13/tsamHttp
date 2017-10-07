@@ -157,37 +157,7 @@ void handle_status_request(int fd_client, FILE *fp)
 		write(fd_client, toSend, nread);
 	}
 	send(fd_client, toSend, strlen(toSend), 0);
-	/*
 
-	if(request == UNKNOWN)
-	{
-			 
-	if(request == GET)
-	{	
-			//close(fd_server);
-	}
-	else if(request == HEAD)
-	{
-		int fd_server;
-		fd_server = (intptr_t) writeRespond();
-		if(fd_server < 0)
-		{
-			printf("can't find webpage to send");
-			exit(0);
-		}
-		
-		int nread;
-		while( (nread = read(fd_server, toSend, sizeof(toSend)) > 0)
-		{
-			write(fd_client, toSend, nread);
-		}
-		send(fd_client, toSend, strlen(toSend), 0);
-		
-	}
-	else*/
- }
-
-	}
 }
 void set_keepalive(FILE *f, int fd_server)
 {
@@ -274,8 +244,8 @@ int main(int argc, char *argv[])
 	struct sockaddr_in server_addr, client_addr;  // internet address
 	socklen_t sin_len = sizeof(client_addr);  // size of address
 	int fd_server, fd_client;
-	//int on = 1;
-	//socklen_t optlen = sizeof(on);
+	int on = 1;
+	socklen_t optlen = sizeof(on);
 
 	port_nr = strtol(argv[1], NULL, 10);
 	printf("Starting server, %d arguments\n", argc);
@@ -290,6 +260,7 @@ int main(int argc, char *argv[])
 	}
 	
 	memset(&server_addr, 0, sizeof(server_addr));
+	setsockopt(fd_server, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(int));
 	
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
@@ -323,22 +294,21 @@ int main(int argc, char *argv[])
 			perror("Connection failed.......");
 			continue;
 		}
-
+/*
 		FILE *f;
         	f = fdopen(fd_client, "w+");
 		set_keepalive(f, fd_server);
-                
-		printf("Got client connection.......\n");	
+*/              
+		printf("Client Connected.....\n");	
 		// Read the request
 		FILE *fp;
 		fp = fdopen(fd_client, "r");
-		printf("after open %d\n", fd_client);
 		if(!fp) 
 		{
 			printf("Error reading file, while processing http");
 			exit(0);
 		}
-
+		
 		// Determine what to do with the request
 		handle_http_request(fd_client, fp); 	
 		
