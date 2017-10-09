@@ -25,7 +25,7 @@ typedef struct
 {
 	char *ip_addr;
 	char *url;
-	int port_nr;
+	char port_nr[6];
 	int request;
 } client_info;
 
@@ -65,12 +65,9 @@ void write_logfile(client_info this_client)
         puts(time_buff);
         fprintf(f, "<%s> ", time_buff);
 	fprintf(f, "<%s> ", this_client.ip_addr);
-	char str_port[10];
-	sprintf(str_port, "%d", this_client.port_nr);
-
-
-	fprintf(f, "<%s> ", str_port);
+	fprintf(f, "<%s> ", this_client.port_nr);
 	fprintf(f, "<%s> ", this_client.url);
+	
 	if(this_client.request == GET)
 	{
 		fprintf(f, "<GET REQUEST> ");
@@ -91,7 +88,7 @@ void write_logfile(client_info this_client)
 	fclose(f);
 }
 
-char* writeRespond(GString *gs, client_info this_client)
+void writeRespond(GString *gs, client_info this_client)
 {
 	memset(toSend, 0, strlen(toSend));
 	printf("writing to respond\n");
@@ -114,9 +111,7 @@ char* writeRespond(GString *gs, client_info this_client)
 		strcat(temp, " ");
 		strcat(temp, this_client.ip_addr);
 		strcat(temp, ":");
-		char str_port[10];
-		sprintf(str_port, "%d", this_client.port_nr);
-		strcat(temp, str_port);
+		strcat(temp, this_client.port_nr);
 		//Isolate the Body of request	
 		char *token;
 		token = strstr(gs->str, "\r\n\r\n");
@@ -135,66 +130,25 @@ char* writeRespond(GString *gs, client_info this_client)
 		strcat(temp, " ");
 		strcat(temp, this_client.ip_addr);
 		strcat(temp, ":");
-		char str_port[10];
-		sprintf(str_port, "%d", this_client.port_nr);
-
-		strcat(temp, str_port); 
+		strcat(temp, this_client.port_nr); 
 		strcat(temp, html_tail);
 		strcpy(toSend, temp);
 		temp[0] = '\0';
 	}
+	
 	write_logfile(this_client);
 	
-	return toSend;	
+		
 }
 
-void handle_status_request(int fd_client, GString *gs, client_info this_client)
+void send_data(int fd_client, GString *gs, client_info this_client)
 {	
-	int fd_server;
-	fd_server = (intptr_t) writeRespond(gs, this_client);
-	//printf("toSend: %s\n", toSend);
-	if(fd_server < 0)
-	{
-		printf("can't find webpage to send");
-		exit(0);
-	}
+	writeRespond(gs, this_client);
 	
-	int nread;
-	while ( (nread = read(fd_server,toSend, sizeof(toSend) )) > 0)
-	{
-		write(fd_client, toSend, nread);
-	}
 	printf("sending %s\n", toSend);
 	send(fd_client, toSend, strlen(toSend), 0);
 	
 }
-/*
-void set_keepalive(FILE *f, int fd_server)
-{
-	int on = 1;
-        socklen_t optlen = sizeof(on);
-	char post_buffer[5000];
-        fseek(f, 0, SEEK_END);
-        long length = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        fread(post_buffer, 1, length, f);
-        fclose(f);
-
-        char *c;
-        c = strstr(post_buffer, "HTTP");
-        c = strtok(c, "\r\n");
-        if(strcmp(c, "HTTP/1.1") == 0)
-        {
-                if(setsockopt(fd_server, SOL_SOCKET, SO_KEEPALIVE, &on, optlen) < 0)
-                {
-                	perror("TCP keep alive error");
-                        close(fd_server);
-                        exit(1);
-                }
-                printf("SO_KEEPALIVE is %s\n", (on ? "ON" : "OFF"));
-        }
-}
-*/
  
 void handle_http_request(int fd_client, GString *gs, client_info this_client)
 {
@@ -203,7 +157,7 @@ void handle_http_request(int fd_client, GString *gs, client_info this_client)
 	GString *temp_gs;
 	temp_gs = g_string_new("");
 	g_string_assign(temp_gs, gs->str);
-
+	this_client.url = '\0';
 	//Get, Post or even Head ?i
 	char *c = NULL;
 	c = strtok(temp_gs->str, " \r\n");
@@ -227,8 +181,9 @@ void handle_http_request(int fd_client, GString *gs, client_info this_client)
 	}
 		
 	//requested url
-	
-	this_client.url = strtok(NULL, " \r\n");
+	c = strtok(NULL, " \r\n");
+	this_client.url = c;
+	c = NULL;
 	if(!this_client.url)
 	{
 		printf("NO URL\n");
@@ -241,7 +196,7 @@ void handle_http_request(int fd_client, GString *gs, client_info this_client)
 	g_string_free(temp_gs, 1);
 	printf("url is: %s\n", this_client.url);
 	
-	handle_status_request(fd_client, gs, this_client);
+	send_data(fd_client, gs, this_client);
 }
 
 
@@ -257,10 +212,12 @@ int main(int argc, char *argv[])
 	struct pollfd fds[200]; //file descriptors line
 	int nfds = 1; // number of file descriptors
 	int port_nr = strtol(argv[1], NULL, 10);
-	int close_conn;
+	char buffer[80]; // Buffer to recieve message
+	int compress_array = FALSE;
+	int close_connection = FALSE;	
+	
+
 	printf("Starting server, %d arguments\n", argc);
-	char buffer[80];
-	int compress_array = FALSE;	
 	// create and bind a TCP socket
 	fd_server = socket(AF_INET, SOCK_STREAM, 0); // returns positive if success
 	
@@ -279,7 +236,7 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
-	// Set socket to be nonblocking.
+	// Set socket to be nonblocking so we can switch between differen connected sockets. 
 	if(ioctl(fd_server, FIONBIO, &on, optlen) < 0)
 	{
 		perror("setting socket to be nonblocking failed");
@@ -320,53 +277,57 @@ int main(int argc, char *argv[])
 	{
 	
 		// Wait for incoming connected sockets.
-		//printf("POLL...\n");
+		
 		int recv_poll = poll(fds, nfds, timeout);
 		//printf("nfds %d\n", nfds);	
 		if(recv_poll < 0)
 		{
-			perror("..Poll failed");
+			perror("Poll failed...");
 			break;
 		}
+
 		if(recv_poll == 0)
 		{
-			perror("..Poll timedout");
+			perror("Poll timedout....");
 			break; 	
 		}
 		current_size = nfds;
-		
-		client_info this_client;
+	
 		int i;
 		for(i = 0; i < current_size; i++)
 		{
-			//printf("i: %d\n", i);	
+			// struct to store information about client in. this info is stored to be logged later and to send back to clients browser	
+			client_info this_client;
+					
 			if(fds[i].revents == 0)
 			{
 				printf("revent = 0\n");
 				continue;
 			}
+
 			if(fds[i].fd == fd_server)
 			{
-				
+				// We have a readable file descriptor!	
 				do
 				{
-					printf("waiting for client\n");
+					printf("waiting for connection....\n");
 					fd_client = accept(fd_server, (struct sockaddr *) &client_addr, &sin_len);
 	 				
 					// Registering clients information
 					this_client.ip_addr = inet_ntoa(client_addr.sin_addr);
-					this_client.port_nr = client_addr.sin_port;
+					sprintf(this_client.port_nr, "%d", client_addr.sin_port);
 						
 					if(fd_client < 0)
 					{
 						//perror("Connection failed.......");
 						break;
 					}
+					
 					printf("New connection!\n");			
 					fds[nfds].fd = fd_client;
 					fds[nfds].events = POLLIN;
 					nfds++;
-					printf("Client Connected.....\n");	
+						
 							
 				} while(fd_client != -1);
 
@@ -375,56 +336,60 @@ int main(int argc, char *argv[])
 			{	
 				int rc;
 				unsigned int len;
-				close_conn = FALSE;
 				GString *gs;
 				gs = g_string_new("");				
 				while(1)
 				{
 					rc = recv(fds[i].fd, buffer, sizeof(buffer), 0);
+					
+					// check if everything is al right with recieving 					
 					if(rc < 0)
 					{
 						if( errno != EWOULDBLOCK)
 						{
 							perror(" recv failed...");
-							close_conn = TRUE;
+							close_connection = TRUE;
 						}
+					}
+
+					//if zero client closed the connection
+					if(rc == 0)
+					{
+						printf("client terminated the connection\n");
+						close_connection = TRUE;
 						break;
 					}
 					
-					if(rc == 0)
-					{
-						printf(" closing connection\n");
-						close_conn = TRUE;
-						break;
-					}
 					len = rc;
 					printf(" %d bytes received\n", len);
 					
-					//printf("string %s\n", gs->str);
+					// Is buffer ready to be sent ?
 					if(len < sizeof(buffer))
 					{
+						//Null terminating the buffer.
 						buffer[len] = '\0';
 						g_string_append(gs, buffer);
-						printf("sending data\n");
-						handle_http_request(fds[i].fd, gs, this_client);
-						close_conn = TRUE;
+						// Start manipulating the request
+						handle_http_request(fds[i].fd, gs, this_client);	
 						g_string_free(gs, 1);	
+						close_connection = TRUE;
 						break;
 					}
 					else
-					{
+					{	// Then load it up!
 						g_string_append(gs, buffer);
 					}
 					
 				}
-				
-				if(close_conn)
+
+				if(close_connection)
 				{
+					close_connection = FALSE;
 					printf("closing connections\n");
 					compress_array = TRUE;
 					close(fds[i].fd);
-					fds[i].fd = -1;
-				}				
+					fds[i].fd = -1;					
+				}	
 			}			
 		}
 		
@@ -458,5 +423,5 @@ int main(int argc, char *argv[])
 			close(fds[i].fd);
 	}
 	printf("Exiting...\n");
-	
+
 }
