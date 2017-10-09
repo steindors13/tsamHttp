@@ -3,23 +3,32 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <netinet/in.h>
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/poll.h>
 #include <fcntl.h>
 #include <glib.h>
+#include <glib/gprintf.h>
 #include <time.h>
+#include <errno.h>
 
 #define GET 1
 #define POST 2
 #define HEAD 3
 #define UNKNOWN 4
 
-int request;
-int port_nr;
-char *ip_addr; 
+typedef struct 
+{
+	char *ip_addr;
+	char *url;
+	int port_nr;
+	int request;
+} client_info;
+
 char ok_header_template[] =
 "HTTP/1.1 200 OK\r\n"
 "Content-type: text/html; charset=UTF -8\r\n\r\n";
@@ -38,56 +47,12 @@ char html_tail[] =
 "</body></html>\r\n";
 
 char toSend[600];
-char *url;
 
-GArray *posts;
-
-char* writeRespond()
-{
-	memset(toSend, '0', strlen(toSend));
-	printf("writing to body\n");
-	
-	if(request == UNKNOWN)
-	{
-		strcpy(toSend, bad_header_template);
-	}
-	else if(request == HEAD)
-	{
-		strcpy(toSend, ok_header_template);
-	}
-	else if(request == POST)
-	{
-		strcpy(toSend, accepted_header_template);
-	}	
-	else
-	{
-		char temp[600];
-		strcpy(temp, ok_header_template);
-		strcat(temp, html);
-		strcat(temp, "http://127.0.0.1");
-		strcat(temp, url);
-		strcat(temp, " ");
-		strcat(temp, ip_addr);
-		strcat(temp, ":");
-		char str_port[10];
-		sprintf(str_port, "%d", port_nr);
-
-		strcat(temp, str_port); 
-		strcat(temp, html_tail);
-		strcpy(toSend, temp);
-	
-		//printf("tosend = %s\n", toSend); 	
-	}
-	
-	return toSend;	
-}
-
-
-void write_logfile()
+void write_logfile(client_info this_client)
 {
 	FILE *f;
 	
-	f = fopen("x.log", "a+");
+	f = fopen("httpd.log", "a+");
 	
 	time_t timer;
         char time_buff[26];
@@ -98,66 +63,110 @@ void write_logfile()
 
         strftime(time_buff, 26, "%Y-%m-%d %H:%M:%S", time_info);
         puts(time_buff);
-        fprintf(f, "%s : ", time_buff);
+        fprintf(f, "<%s> ", time_buff);
+	printf("printing log stuff: ip = %s, port = %d, url = %s, request = %d\n", this_client.ip_addr, this_client.port_nr, this_client.url, this_client.request);
+	fprintf(f, "<%s> ", this_client.ip_addr);
+	char str_port[10];
+	sprintf(str_port, "%d", this_client.port_nr);
 
-	fprintf(f, "%s : ", ip_addr);
-	fprintf(f, "%d : ", port_nr);
-	fprintf(f, "%d : ", request);
-	fprintf(f, "%s : ", url);
+
+	fprintf(f, "<%s> ", str_port);
+	fprintf(f, "<%s> ", this_client.url);
+	if(this_client.request == GET)
+	{
+		fprintf(f, "<GET REQUEST> ");
+	}
+	if(this_client.request == POST)
+	{
+		fprintf(f, "<POST REQUEST> ");
+	}
+	if(this_client.request == HEAD)
+	{
+		fprintf(f, "<HEAD REQUEST> ");
+	}
+	else
+	{
+		fprintf(f, "<UNKNOWN REQUEST> ");
+	}
+	fprintf(f, "\n");
 	fclose(f);
 }
 
-void handle_status_request(int fd_client, FILE *fp)
+char* writeRespond(GString *gs, client_info this_client)
 {
-	if(request == POST)
+	memset(toSend, 0, strlen(toSend));
+	printf("writing to respond\n");
+	
+	if(this_client.request == UNKNOWN)
 	{
-		printf("POST REQUEST\n");
-		char post_buffer[5000];
-		
-		
-		fseek(fp, 0, SEEK_END);
-		long length = ftell(fp);
-		fseek(fp, 0, SEEK_SET);
-		
-		fread(post_buffer, 1, length, fp);	
-		
-		fclose(fp);
-		
-		//Isolate the Body	
-		char *token;
-		token = strstr(post_buffer, "\r\n\r\n");
-		strcat(token, ip_addr);
-		strcat(token, ":");
-		char str_port[10];
-		sprintf(str_port, "%d", port_nr);
-		strcat(token, str_port);
-		printf("Inserting body for Post:\n %s\n", token);
-		GString *s = g_string_new( token);
-		g_array_append_val( posts, s);
-		//testing g-array
-		//s = g_array_index( posts, GString *, 0);
-		//printf ("test string %s\n", s->str);
-		
-		//Free Pointers
-		token = NULL;
-		//g_free(s);
+		strcpy(toSend, bad_header_template);
 	}
+	else if(this_client.request == HEAD)
+	{
+		strcpy(toSend, ok_header_template);
+	}
+	else if(this_client.request == POST)
+	{
+		char temp[600];
+		strcpy(temp, accepted_header_template);
+		strcat(temp, html);
+		strcat(temp, "http://127.0.0.1");
+		strcat(temp, this_client.url);
+		strcat(temp, " ");
+		strcat(temp, this_client.ip_addr);
+		strcat(temp, ":");
+		char str_port[10];
+		sprintf(str_port, "%d", this_client.port_nr);
+		strcat(temp, str_port);
+		//Isolate the Body of request	
+		char *token;
+		token = strstr(gs->str, "\r\n\r\n");
+		printf("token = %s\n", token);
+		strcat(temp, token);
+		strcat(temp, html_tail);
+		strcpy(toSend, temp);
+	}	
+	else
+	{
+		char temp[600];
+		strcpy(temp, ok_header_template);
+		strcat(temp, html);
+		strcat(temp, "http://127.0.0.1");
+		strcat(temp, this_client.url);
+		strcat(temp, " ");
+		strcat(temp, this_client.ip_addr);
+		strcat(temp, ":");
+		char str_port[10];
+		sprintf(str_port, "%d", this_client.port_nr);
 
+		strcat(temp, str_port); 
+		strcat(temp, html_tail);
+		strcpy(toSend, temp);
+		temp[0] = '\0';
+	}
+	write_logfile(this_client);
+	return toSend;	
+}
+
+void handle_status_request(int fd_client, GString *gs, client_info this_client)
+{	
 	int fd_server;
-	fd_server = (intptr_t) writeRespond();
+	fd_server = (intptr_t) writeRespond(gs, this_client);
+	//printf("toSend: %s\n", toSend);
 	if(fd_server < 0)
 	{
 		printf("can't find webpage to send");
 		exit(0);
 	}
-		
+	
 	int nread;
 	while ( (nread = read(fd_server,toSend, sizeof(toSend) )) > 0)
 	{
 		write(fd_client, toSend, nread);
 	}
+	printf("sending %s\n", toSend);
 	send(fd_client, toSend, strlen(toSend), 0);
-	close(fd_client);
+	
 }
 void set_keepalive(FILE *f, int fd_server)
 {
@@ -186,58 +195,50 @@ void set_keepalive(FILE *f, int fd_server)
 }
 
  
-void handle_http_request(int fd_client, FILE *fp)
+void handle_http_request(int fd_client, GString *gs, client_info this_client)
 {
-	//Message buffer to store information in
-	char Message[5000];
-	 
 	// Determine what kind of request it is
-	printf("determining\n");
+	printf("determining request type\n");
+	GString *temp_gs;
+	temp_gs = g_string_new("");
+	g_string_assign(temp_gs, gs->str);
+	//strcpy(&c, gs->str);
+	//Get, Post or even Head ?i
 	char *c = NULL;
-	c = fgets(Message, sizeof(Message), fp);
-	if(!c)
-	{
-		printf("Can't determine request!\n");
-		exit(0);
-	}
-	
-	//Get, Post or even Head ?
-	c = strtok(c, " \r\n");
+	c = strtok(temp_gs->str, " \r\n");
 	printf("%s requested \n", c);
 	
 	if(strcmp(c, "GET") == 0)
 	{
-		request = GET;
+		this_client.request = GET;
 	}
 	else if(strcmp(c, "POST") == 0)
 	{
-		request = POST;
+		this_client.request = POST;
 	}
 	else if(strcmp(c, "HEAD") == 0)
 	{
-		request = HEAD;
+		this_client.request = HEAD;
 	}
 	else
 	{
-		request = UNKNOWN;
+		this_client.request = UNKNOWN;
 	}
 		
 	//requested url
-	url = NULL;
-	url = strtok(NULL, " \r\n");
-	if(!url)
+	
+	this_client.url = strtok(NULL, " \r\n");
+	if(!this_client.url)
 	{
 		printf("NO URL\n");
 	} 
-	if(strcmp(url, "/favicon.ico") == 0)
+	if(strcmp(this_client.url, "/favicon.ico") == 0)
 	{
-		request = UNKNOWN;
+		this_client.request = UNKNOWN;
 	}
-
-	printf("url is: %s\n", url);
-	
-	handle_status_request(fd_client, fp);
-	//close(fd_client);
+	g_string_free(temp_gs, 1);
+	printf("url is: %s\n", this_client.url);
+	handle_status_request(fd_client, gs, this_client);
 }
 
 
@@ -247,79 +248,230 @@ int main(int argc, char *argv[])
 {
 	struct sockaddr_in server_addr, client_addr;  // internet address
 	socklen_t sin_len = sizeof(client_addr);  // size of address
-	int fd_server, fd_client;
+	int fd_server, fd_client = 0, timeout;
 	int on = 1;
 	socklen_t optlen = sizeof(on);
-
-	port_nr = strtol(argv[1], NULL, 10);
+	struct pollfd fds[200];
+	int nfds = 1;
+	int port_nr = strtol(argv[1], NULL, 10);
+	int close_conn;
 	printf("Starting server, %d arguments\n", argc);
-	
+	char buffer[80];
+	int compress_array = FALSE;	
 	// create and bind a TCP socket
 	fd_server = socket(AF_INET, SOCK_STREAM, 0); // returns positive if success
 	
 	if(fd_server < 0)
 	{
 		perror("socket error");
-		exit(1);
+		close(fd_server);
+		exit(-1);
 	}
 	
+	// Allow socket to be reuseable
+	if(setsockopt(fd_server, SOL_SOCKET, SO_REUSEADDR, &on, optlen) < 0)
+	{
+		perror("setting socket option to be reuseable failed");
+		close(fd_server);
+		exit(-1);
+	}
+
+	// Set socket to be nonblocking.
+	if(ioctl(fd_server, FIONBIO, &on, optlen) < 0)
+	{
+		perror("setting socket to be nonblocking failed");
+		close(fd_server);
+		exit(-1);
+	}
+		
+	// Bind to socket
 	memset(&server_addr, 0, sizeof(server_addr));
-	setsockopt(fd_server, SOL_SOCKET, SO_REUSEADDR, &on, optlen);
-	
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_addr.s_addr = INADDR_ANY;
 	server_addr.sin_port = htons(port_nr);
 	
-	// Bind to socket
 	if(bind(fd_server, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
 	{
-		perror("bind");
+		perror("binding Failed");
 		close(fd_server);
-		exit(1);
+		exit(-1);
 	}
 	
 	// Listen for a connection
 	if(listen(fd_server, 10) < 0)
 	{
-		perror("listen");
+		perror("listen failed");
 		close(fd_server);
-		exit(1);
+		exit(-1);
 	}
+	// Initialize the pollfd
+	memset(fds, 0, sizeof(fds));
+	fds[0].fd = fd_server;
+	fds[0].events = POLLIN;
 	
-	posts = g_array_sized_new( FALSE, FALSE, sizeof(GString *), 100 );
-
+	// set timeout to 30sec
+	timeout = 30000;
+	int current_size = 0;
+	printf("starting.....\n");
 	while(1)
 	{
-		printf("waiting for client\n");
-		fd_client = accept(fd_server, (struct sockaddr *) &client_addr, &sin_len);
-	 	ip_addr = inet_ntoa(client_addr.sin_addr);	
-		if(fd_client < 0)
+	
+		// Wait for incoming connected sockets.
+		//printf("POLL...\n");
+		int recv_poll = poll(fds, nfds, timeout);
+		//printf("nfds %d\n", nfds);	
+		if(recv_poll < 0)
 		{
-			perror("Connection failed.......");
-			continue;
+			perror("..Poll failed");
+			break;
 		}
-/*
-		FILE *f;
-        	f = fdopen(fd_client, "w+");
-		set_keepalive(f, fd_server);
-*/              
-		printf("Client Connected.....\n");	
-		// Read the request
-		FILE *fp;
-		fp = fdopen(fd_client, "r");
-		if(!fp) 
+		if(recv_poll == 0)
 		{
-			printf("Error reading file, while processing http");
-			exit(0);
+			perror("..Poll timedout");
+			break; 	
+		}
+		current_size = nfds;
+		
+		client_info this_client;
+		int i;
+		for(i = 0; i < current_size; i++)
+		{
+			//printf("i: %d\n", i);	
+			if(fds[i].revents == 0)
+			{
+				printf("revent = 0\n");
+				continue;
+			}
+			if(fds[i].fd == fd_server)
+			{
+				
+				do
+				{
+					printf("waiting for client\n");
+					fd_client = accept(fd_server, (struct sockaddr *) &client_addr, &sin_len);
+	 				// Registering clients information
+					this_client.ip_addr = inet_ntoa(client_addr.sin_addr);
+					this_client.port_nr = client_addr.sin_port;
+					//ip_addr = inet_ntoa(client_addr.sin_addr);	
+					if(fd_client < 0)
+					{
+						//perror("Connection failed.......");
+						break;
+					}
+					printf("New connection!\n");			
+					fds[nfds].fd = fd_client;
+					fds[nfds].events = POLLIN;
+					nfds++;
+					printf("Client Connected.....\n");	
+							
+				} while(fd_client != -1);
+
+			}
+			else
+			{	
+				int rc;
+				unsigned int len;
+				close_conn = FALSE;
+				GString *gs;
+				gs = g_string_new("");				
+				while(1)
+				{
+					rc = recv(fds[i].fd, buffer, sizeof(buffer), 0);
+					if(rc < 0)
+					{
+						if( errno != EWOULDBLOCK)
+						{
+							perror(" recv failed...");
+							close_conn = TRUE;
+						}
+						break;
+					}
+					
+					if(rc == 0)
+					{
+						printf(" closing connection\n");
+						close_conn = TRUE;
+						break;
+					}
+					len = rc;
+					printf(" %d bytes received\n", len);
+					
+					//printf("string %s\n", gs->str);
+					if(len < sizeof(buffer))
+					{
+						buffer[len] = '\0';
+						g_string_append(gs, buffer);
+						printf("sending data\n");
+						handle_http_request(fds[i].fd, gs, this_client);
+						close_conn = TRUE;
+						g_string_free(gs, 1);	
+						break;
+					}
+					else
+					{
+						g_string_append(gs, buffer);
+					}
+					
+				}
+				
+				if(close_conn)
+				{
+					printf("closing connections\n");
+					compress_array = TRUE;
+					close(fds[i].fd);
+					fds[i].fd = -1;
+				}
+
+ 				/*
+				// Read the request
+				FILE *fp;
+			//	fwrite(buffer, 1, sizeof(buffer), fp);
+				fp = fdopen(fds[i].fd, "r");
+				if(!fp) 
+				{
+					printf("Error reading file, while processing http");
+					exit(-1);
+				}		
+				// Determine what to do with the request
+				handle_http_request(fds[i].fd, fp); 	
+				
+				//Log it
+				//write_logfile();	
+	
+				*/	
+							
+			}			
 		}
 		
-		// Determine what to do with the request
-		handle_http_request(fd_client, fp); 	
-		
-		//Log it
-		write_logfile();	
-	
-	} 
-	
-	return 0;
+		if(compress_array)
+		{
+			printf("compressing.....\n");
+			compress_array = FALSE;
+			int j, k;
+			for(j = 0; j < nfds; j++)
+			{
+				if(fds[j].fd == -1)
+				{
+					for(k = j; k < nfds; k++)
+					{
+						fds[k].fd = fds[k+1].fd;
+					}
+					
+					nfds--;
+					
+				}
+				
+			}
+			printf("done compressing\n");	
+		}
+	}
+	// Cleaning up open sockets
+	int i;
+	for(i = 0; i < nfds; i++)
+	{
+		if(fds[i].fd >= 0)
+			close(fds[i].fd);
+	}
+	printf("Exiting...\n");
+	//return 0;
 }
