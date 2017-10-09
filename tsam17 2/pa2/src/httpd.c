@@ -64,7 +64,6 @@ void write_logfile(client_info this_client)
         strftime(time_buff, 26, "%Y-%m-%d %H:%M:%S", time_info);
         puts(time_buff);
         fprintf(f, "<%s> ", time_buff);
-	printf("printing log stuff: ip = %s, port = %d, url = %s, request = %d\n", this_client.ip_addr, this_client.port_nr, this_client.url, this_client.request);
 	fprintf(f, "<%s> ", this_client.ip_addr);
 	char str_port[10];
 	sprintf(str_port, "%d", this_client.port_nr);
@@ -76,11 +75,11 @@ void write_logfile(client_info this_client)
 	{
 		fprintf(f, "<GET REQUEST> ");
 	}
-	if(this_client.request == POST)
+	else if(this_client.request == POST)
 	{
 		fprintf(f, "<POST REQUEST> ");
 	}
-	if(this_client.request == HEAD)
+	else if(this_client.request == HEAD)
 	{
 		fprintf(f, "<HEAD REQUEST> ");
 	}
@@ -145,6 +144,7 @@ char* writeRespond(GString *gs, client_info this_client)
 		temp[0] = '\0';
 	}
 	write_logfile(this_client);
+	
 	return toSend;	
 }
 
@@ -168,6 +168,7 @@ void handle_status_request(int fd_client, GString *gs, client_info this_client)
 	send(fd_client, toSend, strlen(toSend), 0);
 	
 }
+/*
 void set_keepalive(FILE *f, int fd_server)
 {
 	int on = 1;
@@ -193,7 +194,7 @@ void set_keepalive(FILE *f, int fd_server)
                 printf("SO_KEEPALIVE is %s\n", (on ? "ON" : "OFF"));
         }
 }
-
+*/
  
 void handle_http_request(int fd_client, GString *gs, client_info this_client)
 {
@@ -202,7 +203,7 @@ void handle_http_request(int fd_client, GString *gs, client_info this_client)
 	GString *temp_gs;
 	temp_gs = g_string_new("");
 	g_string_assign(temp_gs, gs->str);
-	//strcpy(&c, gs->str);
+
 	//Get, Post or even Head ?i
 	char *c = NULL;
 	c = strtok(temp_gs->str, " \r\n");
@@ -236,8 +237,10 @@ void handle_http_request(int fd_client, GString *gs, client_info this_client)
 	{
 		this_client.request = UNKNOWN;
 	}
+
 	g_string_free(temp_gs, 1);
 	printf("url is: %s\n", this_client.url);
+	
 	handle_status_request(fd_client, gs, this_client);
 }
 
@@ -251,8 +254,8 @@ int main(int argc, char *argv[])
 	int fd_server, fd_client = 0, timeout;
 	int on = 1;
 	socklen_t optlen = sizeof(on);
-	struct pollfd fds[200];
-	int nfds = 1;
+	struct pollfd fds[200]; //file descriptors line
+	int nfds = 1; // number of file descriptors
 	int port_nr = strtol(argv[1], NULL, 10);
 	int close_conn;
 	printf("Starting server, %d arguments\n", argc);
@@ -349,10 +352,11 @@ int main(int argc, char *argv[])
 				{
 					printf("waiting for client\n");
 					fd_client = accept(fd_server, (struct sockaddr *) &client_addr, &sin_len);
-	 				// Registering clients information
+	 				
+					// Registering clients information
 					this_client.ip_addr = inet_ntoa(client_addr.sin_addr);
 					this_client.port_nr = client_addr.sin_port;
-					//ip_addr = inet_ntoa(client_addr.sin_addr);	
+						
 					if(fd_client < 0)
 					{
 						//perror("Connection failed.......");
@@ -420,26 +424,7 @@ int main(int argc, char *argv[])
 					compress_array = TRUE;
 					close(fds[i].fd);
 					fds[i].fd = -1;
-				}
-
- 				/*
-				// Read the request
-				FILE *fp;
-			//	fwrite(buffer, 1, sizeof(buffer), fp);
-				fp = fdopen(fds[i].fd, "r");
-				if(!fp) 
-				{
-					printf("Error reading file, while processing http");
-					exit(-1);
-				}		
-				// Determine what to do with the request
-				handle_http_request(fds[i].fd, fp); 	
-				
-				//Log it
-				//write_logfile();	
-	
-				*/	
-							
+				}				
 			}			
 		}
 		
@@ -473,5 +458,5 @@ int main(int argc, char *argv[])
 			close(fds[i].fd);
 	}
 	printf("Exiting...\n");
-	//return 0;
+	
 }
